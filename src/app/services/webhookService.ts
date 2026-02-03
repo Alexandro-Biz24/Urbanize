@@ -1,11 +1,12 @@
 /**
  * Service pour envoyer les données vers le webhook n8n
+ * Essaie d'abord TEST, puis PROD en fallback (au moment du clic sur "Estimation")
  */
 
 import { collectAllUserData, collectProjectData, formatDataForWebhook } from './dataCollector';
 
-const DEFAULT_WEBHOOK_URL = 'https://urbaniz.app.n8n.cloud/webhook-test/palissade';
-const WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_URL?.trim() || DEFAULT_WEBHOOK_URL;
+const N8N_WEBHOOK_URL_TEST = 'https://urbaniz.app.n8n.cloud/webhook-test/palissade';
+const N8N_WEBHOOK_URL_PROD = 'https://urbaniz.app.n8n.cloud/webhook/palissade';
 
 export interface WebhookResponse {
   success: boolean;
@@ -26,12 +27,46 @@ function formatWebhookError(status: number, errorText: string): string {
   return `Erreur HTTP ${status}: ${errorText}`;
 }
 
+function extractTotal(responseData: any): number | null {
+  const raw = responseData?.result_estimation ?? responseData?.estimation?.totalPrice ?? responseData?.estimation?.totalCost;
+  let total = raw != null ? (typeof raw === 'number' ? raw : parseFloat(String(raw))) : null;
+  if (total == null) {
+    const arr = Array.isArray(responseData) ? responseData : responseData?.data ?? responseData?.body ?? responseData?.json;
+    const lastItem = Array.isArray(arr) && arr.length > 0 ? arr[arr.length - 1] : null;
+    const t = lastItem?.__TOTAL ?? lastItem?.['__TOTAL'];
+    total = t != null ? (typeof t === 'number' ? t : parseFloat(String(t))) : null;
+  }
+  return total != null && !Number.isNaN(total) ? total : null;
+}
+
+async function postToWebhook(url: string, body: string): Promise<WebhookResponse> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    return { success: false, error: formatWebhookError(response.status, errorText) };
+  }
+  const responseData = await response.json().catch(() => null);
+  if (responseData == null) {
+    return { success: false, error: 'Réponse webhook invalide (JSON vide ou invalide)' };
+  }
+  const total = extractTotal(responseData);
+  if (total == null) {
+    return { success: false, error: 'Réponse webhook invalide : result_estimation ou __TOTAL introuvable.' };
+  }
+  return { success: true, message: 'Données envoyées avec succès', data: responseData };
+}
+
 /**
- * Envoie les données d'un projet spécifique vers le webhook n8n
+ * Envoie les données vers le webhook n8n.
+ * Essaie d'abord TEST, puis PROD si le premier n'est pas disponible.
  */
 export async function sendProjectToWebhook(
   projectType: 'totem' | 'palissade' | 'massif' | 'bet',
-  webhookUrl?: string
+  webhookUrlOverride?: string
 ): Promise<WebhookResponse> {
   try {
     const projectData = collectProjectData(projectType);
@@ -39,49 +74,25 @@ export async function sendProjectToWebhook(
       return { success: false, error: `Aucune donnée pour ${projectType}` };
     }
 
-    const formattedData = formatDataForWebhook(projectData);
-    const url = webhookUrl || WEBHOOK_URL;
+    const body = JSON.stringify(formatDataForWebhook(projectData));
+    const urls = webhookUrlOverride
+      ? [webhookUrlOverride]
+      : [N8N_WEBHOOK_URL_TEST, N8N_WEBHOOK_URL_PROD];
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formattedData),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: formatWebhookError(response.status, errorText) };
-    }
-
-    // Le webhook renvoie : { "success": true, "result_estimation": 19457.47 }
-    const responseData = await response.json().catch(() => null);
-    if (responseData == null) {
-      return { success: false, error: 'Réponse webhook invalide (JSON vide ou invalide)' };
-    }
-
-    // Extraire le total : priorité à result_estimation (format n8n actuel)
-    const raw = responseData?.result_estimation ?? responseData?.estimation?.totalPrice ?? responseData?.estimation?.totalCost;
-    let total = raw != null ? (typeof raw === 'number' ? raw : parseFloat(String(raw))) : null;
-
-    // Fallback : format tableau avec __TOTAL
-    if (total == null) {
-      const arr = Array.isArray(responseData) ? responseData : responseData?.data ?? responseData?.body ?? responseData?.json;
-      const lastItem = Array.isArray(arr) && arr.length > 0 ? arr[arr.length - 1] : null;
-      const t = lastItem?.__TOTAL ?? lastItem?.['__TOTAL'];
-      total = t != null ? (typeof t === 'number' ? t : parseFloat(String(t))) : null;
-    }
-
-    if (total == null || Number.isNaN(total)) {
-      return {
-        success: false,
-        error: 'Réponse webhook invalide : result_estimation ou __TOTAL introuvable.',
-      };
+    let lastError: string | undefined;
+    for (const url of urls) {
+      try {
+        const result = await postToWebhook(url, body);
+        if (result.success) return result;
+        lastError = result.error;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'Erreur réseau';
+      }
     }
 
     return {
-      success: true,
-      message: 'Données envoyées avec succès',
-      data: responseData,
+      success: false,
+      error: lastError || 'Aucun webhook n8n disponible (test et prod).',
     };
   } catch (error) {
     return {
@@ -92,45 +103,61 @@ export async function sendProjectToWebhook(
 }
 
 /**
- * Envoie toutes les données disponibles vers le webhook n8n
+ * Envoie toutes les données disponibles vers le webhook n8n (TEST puis PROD en fallback)
  */
-export async function sendAllDataToWebhook(webhookUrl?: string): Promise<WebhookResponse> {
+export async function sendAllDataToWebhook(webhookUrlOverride?: string): Promise<WebhookResponse> {
   try {
     const allData = collectAllUserData();
     if (allData.length === 0) {
       return { success: false, error: 'Aucune donnée à envoyer' };
     }
-    const formattedData = {
+    const payload = {
       metadata: { timestamp: new Date().toISOString(), source: 'urbanize-frontend', version: '1.0.0', totalProjects: allData.length },
       projects: allData.map((d: any) => formatDataForWebhook(d)),
     };
-    const url = webhookUrl || WEBHOOK_URL;
-    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formattedData) });
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: formatWebhookError(response.status, errorText) };
+    const body = JSON.stringify(payload);
+    const urls = webhookUrlOverride ? [webhookUrlOverride] : [N8N_WEBHOOK_URL_TEST, N8N_WEBHOOK_URL_PROD];
+    let lastError: string | undefined;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          return { success: true, message: `${allData.length} projet(s) envoyé(s)`, data };
+        }
+        lastError = await res.text();
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : 'Erreur réseau';
+      }
     }
-    const responseData = await response.json().catch(() => null);
-    return { success: true, message: `${allData.length} projet(s) envoyé(s)`, data: responseData };
+    return { success: false, error: lastError || 'Aucun webhook disponible.' };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Erreur inconnue' };
   }
 }
 
 /**
- * Envoie des données personnalisées vers le webhook
+ * Envoie des données personnalisées vers le webhook (TEST puis PROD en fallback)
  */
-export async function sendCustomDataToWebhook(data: Record<string, any>, webhookUrl?: string): Promise<WebhookResponse> {
+export async function sendCustomDataToWebhook(data: Record<string, any>, webhookUrlOverride?: string): Promise<WebhookResponse> {
   try {
-    const url = webhookUrl || WEBHOOK_URL;
     const payload = { metadata: { timestamp: new Date().toISOString(), source: 'urbanize-frontend', version: '1.0.0' }, ...data };
-    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: formatWebhookError(response.status, errorText) };
+    const body = JSON.stringify(payload);
+    const urls = webhookUrlOverride ? [webhookUrlOverride] : [N8N_WEBHOOK_URL_TEST, N8N_WEBHOOK_URL_PROD];
+    let lastError: string | undefined;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          return { success: true, message: 'Données envoyées', data };
+        }
+        lastError = await res.text();
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : 'Erreur réseau';
+      }
     }
-    const responseData = await response.json().catch(() => null);
-    return { success: true, message: 'Données envoyées', data: responseData };
+    return { success: false, error: lastError || 'Aucun webhook disponible.' };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Erreur inconnue' };
   }

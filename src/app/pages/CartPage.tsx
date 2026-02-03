@@ -94,7 +94,7 @@ export function CartPage() {
             <h3 className="text-lg font-semibold mb-4 text-slate-800">Estimation du projet</h3>
             <div className="text-center">
               <p className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-emerald-700 to-teal-800 bg-clip-text text-transparent">
-                {subtotalMin.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € – {subtotalMax.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € HT
+                {subtotalMin.toLocaleString('fr-FR')} € – {subtotalMax.toLocaleString('fr-FR')} € HT
               </p>
               <p className="text-sm text-emerald-600 mt-2 font-medium">Fourchette ±5%</p>
               {config.includeInstaller && (

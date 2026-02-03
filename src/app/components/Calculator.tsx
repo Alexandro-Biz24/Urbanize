@@ -113,9 +113,6 @@ export function Calculator({ projectType, onCalculate }: CalculatorProps) {
   const [zoneGeographique, setZoneGeographique] = useState<string>('');
   const [terrainCategory, setTerrainCategory] = useState<string>('');
   const [soilType, setSoilType] = useState<string>('');
-  const [espacementBastaings, setEspacementBastaings] = useState<string>(''); // valeur numérique (m)
-  const [lestType, setLestType] = useState<string>(''); // sélection parmi les 3 options
-
   // Champs HABILLAGE pour le webhook
   const [oculiUnite, setOculiUnite] = useState<string>('');
   const [oculiType, setOculiType] = useState<string>('');
@@ -164,8 +161,6 @@ export function Calculator({ projectType, onCalculate }: CalculatorProps) {
       zoneGeographique,
       terrainCategory,
       soilType,
-      espacementBastaings,
-      lestType,
       // HABILLAGE
       oculiUnite: parseFloat(oculiUnite) || 0,
       oculiType,
@@ -366,7 +361,7 @@ export function Calculator({ projectType, onCalculate }: CalculatorProps) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Type de sol */}
                   <div className="space-y-2">
                     <Label className="text-xs font-medium text-slate-900">
@@ -382,48 +377,6 @@ export function Calculator({ projectType, onCalculate }: CalculatorProps) {
                       <SelectContent>
                         <SelectItem value="Enrobé">Enrobé</SelectItem>
                         <SelectItem value="Meuble">Meuble</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Espacement entre 2 bastaings (m) - valeur numérique */}
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-slate-900">
-                      Espacement entre 2 bastaings (m)
-                    </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Valeur en m"
-                      value={espacementBastaings}
-                      onChange={(e) => setEspacementBastaings(e.target.value)}
-                      className="h-10 border-slate-300"
-                    />
-                  </div>
-
-                  {/* Type de lest - sélection */}
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-slate-900">
-                      Type de lest
-                    </Label>
-                    <Select
-                      value={lestType}
-                      onValueChange={setLestType}
-                    >
-                      <SelectTrigger className="h-10 border-slate-300">
-                        <SelectValue placeholder="Sélectionner un type de lest" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="40*40*40 trou diam 120">
-                          40*40*40 trou diam 120
-                        </SelectItem>
-                        <SelectItem value="40*40*40 pour poteau 80x40mm">
-                          40*40*40 pour poteau 80x40mm
-                        </SelectItem>
-                        <SelectItem value="60*60*60 trou 81*81">
-                          60*60*60 trou 81*81
-                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

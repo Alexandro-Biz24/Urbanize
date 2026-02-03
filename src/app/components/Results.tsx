@@ -155,13 +155,13 @@ export function Results({ config, priceBreakdown, onReset, onAddToCart }: Result
   const carKmEquivalent = (totalCO2 * 5).toFixed(0); // km en voiture
   const treesEquivalent = (totalCO2 / 25).toFixed(1); // arbres nécessaires pour compenser sur 1 an
 
-  // Sous-total : toujours fourchette ±5% autour du prix (webhook ou calcul local)
+  // Sous-total : fourchette ±5% arrondie à la centaine
   const subtotal = priceBreakdown.totalCost + scaffoldingCost;
-  const subtotalMin = Math.round((subtotal * 0.95) * 100) / 100;
-  const subtotalMax = Math.round((subtotal * 1.05) * 100) / 100;
+  const subtotalMin = Math.round((subtotal * 0.95) / 100) * 100;
+  const subtotalMax = Math.round((subtotal * 1.05) / 100) * 100;
 
-  const finalMin = Math.round((subtotalMin + additionalServicesTotal) * 100) / 100;
-  const finalMax = Math.round((subtotalMax + additionalServicesTotal) * 100) / 100;
+  const finalMin = Math.round((subtotalMin + additionalServicesTotal) / 100) * 100;
+  const finalMax = Math.round((subtotalMax + additionalServicesTotal) / 100) * 100;
 
   const generatePDF = () => {
     const doc = new jsPDF();
@@ -507,7 +507,7 @@ export function Results({ config, priceBreakdown, onReset, onAddToCart }: Result
                     Estimation du projet
                   </p>
                   <p className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-emerald-700 to-teal-800 bg-clip-text text-transparent">
-                    {subtotalMin.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € – {subtotalMax.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € HT
+                    {subtotalMin.toLocaleString('fr-FR')} € – {subtotalMax.toLocaleString('fr-FR')} € HT
                   </p>
                   <p className="text-sm text-emerald-600 mt-3 font-medium">
                     Fourchette ±5% • Prix indicatif
@@ -772,7 +772,7 @@ export function Results({ config, priceBreakdown, onReset, onAddToCart }: Result
               <div className="rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 p-6 text-white shadow-lg">
                 <p className="text-sm opacity-90 mb-2">Total global (fourchette ±5%)</p>
                 <p className="text-4xl md:text-5xl font-extrabold">
-                  {finalMin.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € – {finalMax.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € HT
+                  {finalMin.toLocaleString('fr-FR')} € – {finalMax.toLocaleString('fr-FR')} € HT
                 </p>
               </div>
               
